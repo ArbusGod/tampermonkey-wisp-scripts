@@ -19,43 +19,7 @@
     console.log("Wisp Tools cargado");
 
     // =========================
-    // CONFIG: CAJAS / PON "LLENOS"
-    // =========================
-    // >>> AQUÍ ES DONDE VAS A IR AGREGANDO COSAS "LLENAS" <<<
-    //
-    // 1) PONs llenos: formato "frame/slot/port"
-    //    Ejemplo: "0/1/13"
-    const FULL_PONS = new Set([
-        "0/1/13", // (PROBAR) PON lleno
-        // "0/1/14",
-        // "0/2/1",
-    ]);
-
-    // 2) Cajas llenas por nombre exacto (tal cual se ve en el select)
-    //    Ejemplo: "LOGU 108 (1)"
-    const FULL_BOXES_EXACT = new Set([
-        // "LOGU 108 (1)",
-    ]);
-
-    // 3) Cajas llenas por patrón (prefijo).
-    //    Tu caso: "zona Logu 100" => todas las cajas LOGU que empiezan con 1**
-    //    O sea: LOGU 100..199
-    //
-    // Si quieres sumar otras zonas/patrones, agrega más reglas aquí.
-    const FULL_BOX_RULES = [
-        // LOGU 1**
-        (boxText) => {
-            // boxText viene tipo: "LOGU 108 (1)" o "LOGU 105 (1x8) (0)"
-            // Tomamos el número después de "LOGU "
-            const m = boxText.match(/^\s*LOGU\s+(\d+)/i);
-            if (!m) return false;
-            const n = Number(m[1]);
-            return Number.isFinite(n) && n >= 100 && n <= 199;
-        },
-    ];
-
-    // =========================
-    // PANEL FLOTANTE
+    // PANEL FLOTANTE (se queda igual)
     // =========================
     const panel = document.createElement("div");
     panel.innerHTML = `
@@ -65,7 +29,6 @@
             <button id="wisp-copy">Copiar cliente</button>
         </div>
     `;
-
     document.body.appendChild(panel);
 
     const style = document.createElement("style");
@@ -83,13 +46,11 @@
             font-family: Arial;
             width: 160px;
         }
-
         #wisp-header {
             font-weight: bold;
             margin-bottom: 8px;
             text-align: center;
         }
-
         #wisp-panel button {
             width: 100%;
             margin-top: 5px;
@@ -98,7 +59,6 @@
             border-radius: 6px;
             cursor: pointer;
         }
-
         #wisp-panel button:hover {
             background: #2563eb;
             color: white;
@@ -107,92 +67,153 @@
     document.head.appendChild(style);
 
     // =========================
-    // ALERTA "LLENO"
+    // >>> CONFIGURACIÓN DE "LLENOS" (EDITAR AQUÍ)
     // =========================
 
-    // Para no spammear alert() repetidas veces
-    const shownWarnings = new Set();
+    // >>> AQUÍ AÑADE LOS PUERTOS PON LLENOS <<<
+    // Formato: "frame/slot/port" (ej: "0/1/13")
+    const FULL_PONS = new Set([
+        "0/1/13", // Ejemplo: PON lleno (0/1/13)
+        // "0/1/14",
+        // "0/2/5",
+    ]);
 
-    function getSelectedBoxText() {
-        const sel = document.getElementById("select_box");
-        if (!sel || !sel.options || sel.selectedIndex < 0) return "";
-        return (sel.options[sel.selectedIndex]?.textContent || "").trim();
+    // >>> AQUÍ AÑADE LAS CAJAS LLENAS <<<
+    // Se compara por "nombre base" (por ejemplo "SAVI 101"), sin importar los "(7)" u otros sufijos.
+    const FULL_BOX_BASE_NAMES = new Set([
+        "SAVI 101", // Ejemplo: caja llena
+        // "LOGU 108",
+        // "CABA 902",
+    ]);
+
+    // =========================
+    // DETECCIÓN Y ADVERTENCIAS
+    // =========================
+
+    // Para evitar repetir alertas idénticas en la misma página
+    const warnedKeys = new Set();
+
+    function todayISO() {
+        // Fecha local en formato YYYY-MM-DD
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
     }
 
-    function getPonString() {
-        const frame = (document.getElementById("frame_fiber_register")?.value || "").trim();
-        const slot  = (document.getElementById("slot_fiber_register")?.value || "").trim();
-        const port  = (document.getElementById("port_fiber_register")?.value || "").trim();
+    function readPon() {
+        const frame = (document.getElementById("frame_fiber_register")?.value ?? "").trim();
+        const slot = (document.getElementById("slot_fiber_register")?.value ?? "").trim();
+        const port = (document.getElementById("port_fiber_register")?.value ?? "").trim();
 
-        // Solo devolvemos PON si los 3 existen (así NO muestra advertencia si está vacío)
+        // Según tu caso, siempre habrá datos. Igual, si alguno falta, no avisamos.
         if (!frame || !slot || !port) return "";
         return `${frame}/${slot}/${port}`;
     }
 
-    function isFullBox(boxText) {
-        if (!boxText) return false;
-        if (FULL_BOXES_EXACT.has(boxText)) return true;
-        return FULL_BOX_RULES.some((rule) => {
-            try { return rule(boxText); } catch { return false; }
-        });
-    }
-
-    function isFullPon(ponStr) {
-        if (!ponStr) return false;
-        return FULL_PONS.has(ponStr);
-    }
-
-    function maybeWarnFull() {
-        const boxText = getSelectedBoxText();
-        const ponStr = getPonString();
-
-        const fullByBox = isFullBox(boxText);
-        const fullByPon = isFullPon(ponStr);
-
-        // Solo mostrar advertencia cuando realmente detecta "lleno"
-        if (!fullByBox && !fullByPon) return;
-
-        // Construir mensaje
-        const reasons = [];
-        if (fullByBox) reasons.push(`Caja llena detectada: ${boxText || "(sin caja)"}`);
-        if (fullByPon) reasons.push(`PON lleno detectado: ${ponStr}`);
-
-        const msg = `ADVERTENCIA (Wisp Tools)\n\n${reasons.join("\n")}`;
-
-        // Clave para evitar repetir la misma advertencia
-        const key = `${boxText}||${ponStr}||${fullByBox}||${fullByPon}`;
-        if (shownWarnings.has(key)) return;
-        shownWarnings.add(key);
-
-        alert(msg);
-    }
-
-    function setupFullDetectors() {
-        // 1) Cuando cambia la caja
-        const boxSel = document.getElementById("select_box");
-        if (boxSel) {
-            boxSel.addEventListener("change", maybeWarnFull);
-            // por si ya está seleccionada al cargar
-            setTimeout(maybeWarnFull, 500);
+    function readBoxText() {
+        // 1) Intentar desde el select real
+        const sel = document.getElementById("select_box");
+        if (sel && sel.selectedIndex >= 0) {
+            const txt = (sel.options[sel.selectedIndex]?.textContent || "").trim();
+            if (txt) return txt;
         }
 
-        // 2) Cuando cambia el PON (inputs)
+        // 2) Fallback para "uniform" (tu HTML muestra el texto aquí)
+        const spanTxt = (document.querySelector("#uniform-select_box span")?.textContent || "").trim();
+        return spanTxt;
+    }
+
+    function normalizeBoxBaseName(boxText) {
+        // De "SAVI 101 (7)" -> "SAVI 101"
+        // De "LOGU 105 (1x8) (0)" -> "LOGU 105"
+        // Si no matchea, devolvemos el texto original.
+        const m = boxText.match(/^\s*([A-ZÑ]+)\s+(\d+)\b/i);
+        if (!m) return boxText.trim();
+        return `${m[1].toUpperCase()} ${m[2]}`;
+    }
+
+    function maybeWarn() {
+        const pon = readPon();
+        const boxText = readBoxText();
+
+        const ponFull = pon && FULL_PONS.has(pon);
+
+        const boxBase = boxText ? normalizeBoxBaseName(boxText) : "";
+        const boxFull = boxBase && FULL_BOX_BASE_NAMES.has(boxBase);
+
+        // Solo avisar si hay algo lleno
+        if (!ponFull && !boxFull) return;
+
+        const date = todayISO();
+        const reasons = [];
+        if (ponFull) reasons.push(`Puerto PON LLENO: ${pon}`);
+        if (boxFull) reasons.push(`Caja LLENA: ${boxBase}`);
+
+        const message =
+            `ADVERTENCIA (Wisp Tools)\n\n` +
+            `${reasons.join("\n")}\n\n` +
+            `Última verificación realizada: ${date}`;
+
+        // Evitar repetir el mismo mensaje por cambios/inputs
+        const key = `${pon}|${ponFull}|${boxBase}|${boxFull}|${date}`;
+        if (warnedKeys.has(key)) return;
+        warnedKeys.add(key);
+
+        alert(message);
+    }
+
+    function setupAutoCheck() {
+        // Chequeo inicial (al entrar)
+        maybeWarn();
+
+        // Si el usuario cambia PON (input) o caja (select), re-chequear
+        const boxSel = document.getElementById("select_box");
+        if (boxSel) boxSel.addEventListener("change", maybeWarn);
+
         const ids = ["frame_fiber_register", "slot_fiber_register", "port_fiber_register"];
         for (const id of ids) {
             const el = document.getElementById(id);
             if (!el) continue;
-            el.addEventListener("input", maybeWarnFull);
-            el.addEventListener("change", maybeWarnFull);
+            el.addEventListener("change", maybeWarn);
+            el.addEventListener("input", maybeWarn);
         }
     }
 
-    // Esperar un poco por si la página carga el formulario tarde
-    setTimeout(setupFullDetectors, 800);
+    // Reintentos por si la página carga los inputs/select con delay
+    (function bootWithRetries() {
+        let tries = 0;
+        const maxTries = 30;      // ~ 30 * 250ms = 7.5s
+        const intervalMs = 250;
+
+        const timer = setInterval(() => {
+            tries++;
+
+            const hasPonInputs =
+                document.getElementById("frame_fiber_register") &&
+                document.getElementById("slot_fiber_register") &&
+                document.getElementById("port_fiber_register");
+
+            const hasBox =
+                document.getElementById("select_box") ||
+                document.querySelector("#uniform-select_box span");
+
+            if (hasPonInputs || hasBox) {
+                clearInterval(timer);
+                setupAutoCheck();
+                return;
+            }
+
+            if (tries >= maxTries) {
+                clearInterval(timer);
+            }
+        }, intervalMs);
+    })();
 
     // =========================
     // BOTONES
     // =========================
-
     document.getElementById("wisp-refresh").onclick = () => {
         location.reload();
     };
@@ -206,5 +227,4 @@
             alert("Selecciona un nombre o texto primero.");
         }
     };
-
 })();
