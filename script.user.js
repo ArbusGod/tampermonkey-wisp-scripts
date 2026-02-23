@@ -4,7 +4,10 @@
 // @version      1.0.0
 // @description  Herramientas para sistema WISP
 // @author       Equipo
-// @match        *://*/*
+// @match        *://*/wispcontrol/tech/*
+// @match        *://*/wispcontrol/*
+// @match        *://*/wispro/*
+// @match        *://*/fact_fichacli*
 // @updateURL    https://raw.githubusercontent.com/ArbusGod/tampermonkey-wisp-scripts/main/script.user.js
 // @downloadURL  https://raw.githubusercontent.com/ArbusGod/tampermonkey-wisp-scripts/main/script.user.js
 // @grant        none
