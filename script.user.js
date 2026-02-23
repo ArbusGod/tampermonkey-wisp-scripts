@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wisp Tools
 // @namespace    wisp-tools
-// @version      1.0.6
+// @version      1.0.7
 // @description  Herramientas para sistema WISP
 // @author       Equipo
 // @match        *://*/wispcontrol/tech/*
@@ -38,20 +38,22 @@
 
     // >>> AQUÍ AÑADE LOS PUERTOS PON LLENOS <<<
     const FULL_PONS = new Set([
-        "2/0/1/13", // OLT2_DC2_Katy_Flores + 0/1/13
-        // "6/0/1/13", // OLT5_DC9_Eusebio_Ayala + 0/1/13
+        "2/0/1/13",
     ]);
 
     // >>> AQUÍ AÑADE LAS CAJAS LLENAS (UNA POR UNA) <<<
     const FULL_BOX_BASE_NAMES = new Set([
-        "DAES 208",
+        "YTU 104",
+        "YTU 106",
+        "YTU 103",
+        // "DAES 208",
     ]);
 
     // =========================
     // STORAGE KEYS (Tampermonkey)
     // =========================
     const STORE_KEY_PON_DATES = "wisp_tools_last_verified_pons_v3"; // { "2/0/1/13": "YYYY-MM-DD", ... }
-    const STORE_KEY_BOX_DATES = "wisp_tools_last_verified_boxes_v1"; // { "DAES 208": "YYYY-MM-DD", ... }
+    const STORE_KEY_BOX_DATES = "wisp_tools_last_verified_boxes_v1"; // { "YTU 104": "YYYY-MM-DD", ... }
 
     function getPonDates() { return GM_getValue(STORE_KEY_PON_DATES, {}); }
     function setPonDates(obj) { GM_setValue(STORE_KEY_PON_DATES, obj); }
@@ -93,24 +95,9 @@
         const sel = document.getElementById("select_olt");
         if (!sel) return { oltId: "", oltName: "" };
 
-        const oltId = (sel.value || "").trim(); // ID real del sistema
+        const oltId = (sel.value || "").trim();
         const oltName = (sel.options?.[sel.selectedIndex]?.textContent || "").trim();
         return { oltId, oltName };
-    }
-
-    function readBoxText() {
-        const sel = document.getElementById("select_box");
-        if (sel && sel.selectedIndex >= 0) {
-            const txt = (sel.options[sel.selectedIndex]?.textContent || "").trim();
-            if (txt) return txt;
-        }
-        return (document.querySelector("#uniform-select_box span")?.textContent || "").trim();
-    }
-
-    function normalizeBoxBaseName(boxText) {
-        const m = boxText.match(/^\s*([A-ZÑ]+)\s+(\d+)\b/i);
-        if (!m) return boxText.trim();
-        return `${m[1].toUpperCase()} ${m[2]}`;
     }
 
     function buildPonKey() {
@@ -118,7 +105,6 @@
         const parts = readPonParts();
         if (!parts) return { ponKey: "", oltId, oltName, ponPretty: "" };
 
-        // Si no hay OLT seleccionada todavía, no comparamos FULL_PONS
         if (!oltId) {
             return {
                 ponKey: "",
@@ -131,6 +117,35 @@
         const ponKey = `${oltId}/${parts.frame}/${parts.slot}/${parts.port}`;
         const ponPretty = `${parts.frame}/${parts.slot}/${parts.port}`;
         return { ponKey, oltId, oltName, ponPretty };
+    }
+
+    function readBoxText() {
+        // 1) select real
+        const sel = document.getElementById("select_box");
+        if (sel && sel.selectedIndex >= 0) {
+            const txt = (sel.options[sel.selectedIndex]?.textContent || "").trim();
+            if (txt) return txt;
+        }
+
+        // 2) uniform (tu caso)
+        const s1 = (document.querySelector("#uniform-select_box span")?.textContent || "").trim();
+        if (s1) return s1;
+
+        // 3) fallback: buscar algún "uniform" que contenga select_box y tomar su span
+        const uniformWrap = document.querySelector('#uniform-select_box, [id^="uniform-"][id*="select_box"]');
+        const s2 = (uniformWrap?.querySelector("span")?.textContent || "").trim();
+        if (s2) return s2;
+
+        return "";
+    }
+
+    function normalizeBoxBaseName(boxText) {
+        // Buscar en cualquier parte: "LETRAS NUMERO"
+        // Ej: "(borrar) YTU 104 (16)" -> "YTU 104"
+        // Ej: "--- YTU 104 (8)" -> "YTU 104"
+        const m = boxText.match(/([A-ZÑ]{2,})\s+(\d{1,6})\b/i);
+        if (!m) return boxText.trim();
+        return `${m[1].toUpperCase()} ${m[2]}`;
     }
 
     // =========================
@@ -347,10 +362,8 @@
     }
 
     function setupAutoCheck() {
-        // Al cargar (cada refresh): si corresponde, sale el aviso
         checkAndWarnIfFull();
 
-        // Cambios en PON
         const ponIds = ["frame_fiber_register", "slot_fiber_register", "port_fiber_register"];
         for (const id of ponIds) {
             const el = document.getElementById(id);
@@ -359,19 +372,16 @@
             el.addEventListener("change", checkAndWarnIfFull);
         }
 
-        // Cambios en OLT
         const oltSel = document.getElementById("select_olt");
         if (oltSel) oltSel.addEventListener("change", checkAndWarnIfFull);
 
-        // Cambios en caja
         const boxSel = document.getElementById("select_box");
         if (boxSel) boxSel.addEventListener("change", checkAndWarnIfFull);
     }
 
-    // Reintentos por carga tardía
     (function bootWithRetries() {
         let tries = 0;
-        const maxTries = 50; // ~12.5s
+        const maxTries = 50;
         const intervalMs = 250;
 
         const timer = setInterval(() => {
