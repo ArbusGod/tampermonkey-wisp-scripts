@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wisp Tools
 // @namespace    wisp-tools
-// @version      1.0.2
+// @version      1.0.3
 // @description  Herramientas para sistema WISP
 // @author       Equipo
 // @match        *://*/wispcontrol/tech/*
@@ -23,15 +23,15 @@
     // >>> AQUÍ AÑADE LOS PUERTOS PON LLENOS <<<
     // Formato: "frame/slot/port" (ej: "0/1/13")
     const FULL_PONS = new Set([
-        "0/1/13", // Ejemplo: PON lleno
+        "0/1/13", // PON lleno (ejemplo / prueba)
         // "0/1/14",
     ]);
 
-    // >>> AQUÍ AÑADE LAS CAJAS LLENAS <<<
-    // Se compara por "nombre base" (por ejemplo "SAVI 101"), ignorando "(7)" u otros sufijos.
+    // >>> AQUÍ AÑADE LAS CAJAS LLENAS (UNA POR UNA) <<<
+    // Se compara por "nombre base" (por ejemplo "DAES 208"), ignorando "(7)" u otros sufijos del select.
     const FULL_BOX_BASE_NAMES = new Set([
-        "SAVI 101", // Ejemplo: caja llena
-        // "LOGU 108",
+        "DAES 208", // ejemplo: caja llena
+        // "SAVI 999",
     ]);
 
     // =========================
@@ -55,17 +55,18 @@
     }
 
     function readBoxText() {
+        // 1) Intentar desde el select real
         const sel = document.getElementById("select_box");
         if (sel && sel.selectedIndex >= 0) {
             const txt = (sel.options[sel.selectedIndex]?.textContent || "").trim();
             if (txt) return txt;
         }
-        // Fallback para uniform
+        // 2) Fallback para uniform
         return (document.querySelector("#uniform-select_box span")?.textContent || "").trim();
     }
 
     function normalizeBoxBaseName(boxText) {
-        // "SAVI 101 (7)" -> "SAVI 101"
+        // "DAES 208 (7)" -> "DAES 208"
         // "LOGU 105 (1x8) (0)" -> "LOGU 105"
         const m = boxText.match(/^\s*([A-ZÑ]+)\s+(\d+)\b/i);
         if (!m) return boxText.trim();
@@ -78,7 +79,6 @@
 
     const UI_ID = "wisp-warning-panel";
     const UI_STYLE_ID = "wisp-warning-style";
-    let lastShownKey = ""; // para no refrescar la UI sin necesidad
 
     function ensureStyles() {
         if (document.getElementById(UI_STYLE_ID)) return;
@@ -170,26 +170,6 @@
         return panel;
     }
 
-    function showWarningPanel({ pon, boxBase, ponFull, boxFull }) {
-        const panel = ensurePanel();
-        const body = document.getElementById(`${UI_ID}-body`);
-        const foot = document.getElementById(`${UI_ID}-foot`);
-
-        const date = todayISO();
-        const key = `${pon}|${ponFull}|${boxBase}|${boxFull}|${date}`;
-        if (key === lastShownKey && panel.style.display !== "none") return;
-        lastShownKey = key;
-
-        const lines = [];
-        if (ponFull) lines.push(`<div class="wisp-row"><b>Puerto PON lleno:</b> ${escapeHtml(pon)}</div>`);
-        if (boxFull) lines.push(`<div class="wisp-row"><b>Caja llena:</b> ${escapeHtml(boxBase)}</div>`);
-
-        body.innerHTML = lines.join("");
-        foot.textContent = `Última verificación: ${date}`;
-
-        panel.style.display = "block";
-    }
-
     function escapeHtml(s) {
         return String(s)
             .replaceAll("&", "&amp;")
@@ -197,6 +177,21 @@
             .replaceAll(">", "&gt;")
             .replaceAll('"', "&quot;")
             .replaceAll("'", "&#039;");
+    }
+
+    function showWarningPanel({ pon, boxBase, ponFull, boxFull }) {
+        const panel = ensurePanel();
+        const body = document.getElementById(`${UI_ID}-body`);
+        const foot = document.getElementById(`${UI_ID}-foot`);
+        const date = todayISO();
+
+        const lines = [];
+        if (ponFull) lines.push(`<div class="wisp-row"><b>Puerto PON lleno:</b> ${escapeHtml(pon)}</div>`);
+        if (boxFull) lines.push(`<div class="wisp-row"><b>Caja llena:</b> ${escapeHtml(boxBase)}</div>`);
+
+        body.innerHTML = lines.join("");
+        foot.textContent = `Última verificación: ${date}`;
+        panel.style.display = "block";
     }
 
     // =========================
@@ -218,10 +213,10 @@
     }
 
     function setupAutoCheck() {
-        // Chequeo inicial
+        // IMPORTANTE: se ejecuta al cargar -> así sale la advertencia en cada refresh si corresponde
         checkAndWarnIfFull();
 
-        // Re-chequear cuando cambie PON
+        // Si cambian valores en la página, volver a verificar
         const ponIds = ["frame_fiber_register", "slot_fiber_register", "port_fiber_register"];
         for (const id of ponIds) {
             const el = document.getElementById(id);
@@ -230,7 +225,6 @@
             el.addEventListener("change", checkAndWarnIfFull);
         }
 
-        // Re-chequear cuando cambie caja
         const boxSel = document.getElementById("select_box");
         if (boxSel) boxSel.addEventListener("change", checkAndWarnIfFull);
     }
@@ -238,7 +232,7 @@
     // Reintentos por carga tardía (WISP a veces renderiza luego)
     (function bootWithRetries() {
         let tries = 0;
-        const maxTries = 30; // ~7.5s
+        const maxTries = 40; // ~10s
         const intervalMs = 250;
 
         const timer = setInterval(() => {
@@ -262,5 +256,4 @@
             if (tries >= maxTries) clearInterval(timer);
         }, intervalMs);
     })();
-
 })();
