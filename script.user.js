@@ -44,7 +44,7 @@
 
     // >>> AQUÍ AÑADE LAS CAJAS LLENAS (UNA POR UNA) <<<
     const FULL_BOX_BASE_NAMES = new Set([
-        // "DAES 208",
+        "DAES 208",
     ]);
 
     // =========================
